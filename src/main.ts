@@ -3,6 +3,7 @@ import heroImg from './assets/hero.png'
 import typescriptLogo from './assets/typescript.svg'
 import viteLogo from './assets/vite.svg'
 import { setupCounter } from './counter.ts'
+import { createScratchCard } from './scratch-card/index.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <section id="center">
@@ -16,6 +17,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
   </div>
   <button id="counter" type="button" class="counter"></button>
+  <div id="prize-card" aria-label="刮刮卡演示位"></div>
 </section>
 
 <div class="ticks"></div>
@@ -58,3 +60,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 `
 
 setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+
+const scratchCard = createScratchCard({
+  prize: {
+    title: '谢谢参与',
+    description: '别灰心，再来一次吧',
+    image: { src: typescriptLogo, alt: 'TypeScript 标志' },
+  },
+  width: 320,
+  height: 200,
+})
+document
+  .querySelector<HTMLDivElement>('#prize-card')!
+  .replaceWith(scratchCard.element)

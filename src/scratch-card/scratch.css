@@ -1,0 +1,177 @@
+.scratch-card {
+  /* light 默认变量；深色值在下方 prefers-color-scheme 块覆盖 */
+  --scratch-cover-1: #d4d6de;
+  --scratch-cover-2: #9498a4;
+  --scratch-cover-highlight: rgba(255, 255, 255, 0.85);
+  --scratch-cover-edge: rgba(30, 32, 40, 0.35);
+  --scratch-hint: #f7f7fa;
+  --scratch-prize-bg: var(--bg);
+  --scratch-prize-border: var(--border);
+  --reveal-dur: 420ms;
+
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--scratch-prize-border);
+  border-radius: 16px;
+  background: var(--scratch-prize-bg);
+  box-shadow: var(--shadow);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.scratch-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .scratch-card {
+    --scratch-cover-1: #5b5e68;
+    --scratch-cover-2: #33353d;
+    --scratch-cover-highlight: rgba(220, 224, 235, 0.5);
+    --scratch-cover-edge: rgba(0, 0, 0, 0.6);
+    --scratch-hint: #e8eaf0;
+  }
+}
+
+.scratch-prize {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 20px;
+  box-sizing: border-box;
+}
+
+.scratch-prize-img {
+  max-width: 42%;
+  max-height: 82%;
+  border-radius: 10px;
+}
+
+.scratch-prize-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.scratch-prize-text h3 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text-h);
+}
+
+.scratch-prize-text p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.scratch-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+  transition:
+    opacity var(--reveal-dur) ease,
+    transform var(--reveal-dur) ease;
+}
+
+.is-scratching .scratch-canvas {
+  cursor: grabbing;
+}
+
+/* 揭示：canvas 淡出 + 轻微放大；动画结束后 visibility:hidden 移出命中测试 */
+.is-revealing .scratch-canvas,
+.is-revealed .scratch-canvas {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+.is-revealed .scratch-canvas {
+  visibility: hidden;
+}
+
+.scratch-hint {
+  position: absolute;
+  z-index: 2;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.scratch-reveal-btn,
+.scratch-reset-btn {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.scratch-reveal-btn {
+  top: 10px;
+  right: 10px;
+}
+
+.scratch-reset-btn {
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+}
+
+.scratch-reveal-btn:hover,
+.scratch-reset-btn:hover,
+.scratch-reveal-btn:focus-visible,
+.scratch-reset-btn:focus-visible {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* 无 canvas 降级：奖品层改为普通文档流展示 */
+.is-no-canvas .scratch-prize {
+  position: static;
+  inset: auto;
+  min-height: 100%;
+}
+
+.is-no-canvas.is-revealed .scratch-reveal-btn {
+  display: none;
+}
+
+.is-no-canvas:not(.is-revealed) .scratch-prize:empty::after {
+  content: '当前环境不支持刮擦，请点击右上角按钮揭晓';
+  color: var(--text);
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scratch-canvas {
+    transition: none;
+  }
+  .is-revealing .scratch-canvas,
+  .is-revealed .scratch-canvas {
+    transform: none;
+  }
+}
