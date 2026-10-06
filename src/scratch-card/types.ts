@@ -40,6 +40,21 @@ export interface ScratchCardOptions {
   coverText?: string
   /** 涂层随机纹理基础种子；不传则由工厂自行取默认值 */
   seed?: number
+  /**
+   * 会话恢复（可选，供编排层注入；普通调用方无需传入）：
+   * 不传或传空对象时行为与既有版本完全一致。
+   */
+  restore?: ScratchRestoreOptions
+}
+
+/** 会话恢复描述：刷新后把卡片直接呈现到持久化时的状态 */
+export interface ScratchRestoreOptions {
+  /** true 时构造完成即为 revealed 态：无动画、不发事件、涂层隐藏 */
+  revealed?: boolean
+  /** 已刮进度 0~1（降采样近似值），默认 0 */
+  progress?: number
+  /** 已刮圆戳（CSS px 坐标系），在首次涂层绘制完成后回放擦除 */
+  stamps?: readonly Stamp[]
 }
 
 export interface ScratchCardEventMap {

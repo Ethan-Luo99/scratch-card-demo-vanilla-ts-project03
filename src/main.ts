@@ -3,7 +3,7 @@ import heroImg from './assets/hero.png'
 import typescriptLogo from './assets/typescript.svg'
 import viteLogo from './assets/vite.svg'
 import { setupCounter } from './counter.ts'
-import { createScratchCard } from './scratch-card/index.ts'
+import { createScratchActivity } from './scratch-activity/index.ts'
 import cardImg from './assets/typescript.svg'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -64,13 +64,34 @@ setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
 
 // 占位节点 replaceWith 挂载（设计 B3/A2）：严禁 innerHTML += 重建子树，
 // 否则会丢失 counter 等既有监听。
-const scratchCard = createScratchCard({
-  prize: {
-    title: '谢谢参与',
-    description: '再来一次吧',
-    image: { src: cardImg, alt: 'TypeScript 标志（占位奖品图）' },
-  },
+const scratchActivity = createScratchActivity({
+  cards: [
+    {
+      prize: {
+        title: '谢谢参与',
+        description: '再来一次吧',
+        image: { src: cardImg, alt: 'TypeScript 标志（占位奖品图）' },
+      },
+    },
+    {
+      prize: {
+        title: '三等奖',
+        description: '解锁下一张试试手气',
+        image: { src: cardImg, alt: 'TypeScript 标志（占位奖品图）' },
+      },
+    },
+    {
+      prize: {
+        title: '一等奖',
+        description: '恭喜，全部揭晓！',
+        image: { src: cardImg, alt: 'TypeScript 标志（占位奖品图）' },
+      },
+    },
+  ],
   width: 320,
   height: 200,
+  summaryDescription: '3 张刮刮卡已全部揭晓。',
 })
-document.querySelector<HTMLDivElement>('#prize-card')!.replaceWith(scratchCard.element)
+document
+  .querySelector<HTMLDivElement>('#prize-card')!
+  .replaceWith(scratchActivity.element)

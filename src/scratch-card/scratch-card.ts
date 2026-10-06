@@ -17,6 +17,7 @@ import type {
   ScratchCardHandle,
   ScratchCardOptions,
   ScratchPrize,
+  Stamp,
 } from './types.ts'
 import { STATE } from './types.ts'
 import type { State } from './types.ts'
@@ -77,10 +78,13 @@ export function createScratchCard(
   const revealDuration = Math.max(0, options.revealDuration ?? DEFAULT_REVEAL_DURATION)
   const coverText = options.coverText ?? DEFAULT_COVER_TEXT
   const baseSeed = options.seed ?? DEFAULT_SEED
+  const restore = options.restore
 
   let state: State = STATE.Idle
   let roundId = 0
-  let progress = 0
+  let progress = clamp(restore?.progress ?? 0, 0, 1)
+  // 待回放的已刮圆戳：首次涂层绘制完成后擦除一次即清空
+  let pendingStamps: readonly Stamp[] | null = restore?.stamps ?? null
   let prize: ScratchPrize = options.prize
   let destroyed = false
   let prizeInjected = false
@@ -250,6 +254,10 @@ export function createScratchCard(
     cssWidth = nextWidth
     cssHeight = nextHeight
     lockCanvasStyles(state !== STATE.Revealing && state !== STATE.Revealed)
+    // revealed 态下 resize 不得让涂层重新可见（会话恢复与正常揭示共用此不变式）
+    if (state === STATE.Revealed) {
+      canvas.style.setProperty('visibility', 'hidden', 'important')
+    }
 
     if (snapshot) {
       ctx.save()
@@ -258,6 +266,10 @@ export function createScratchCard(
       ctx.restore()
     } else {
       repaintCover()
+      if (pendingStamps) {
+        eraseStamps(ctx, pendingStamps)
+        pendingStamps = null
+      }
     }
     hasFreshCover = true
     if (sampler) sampler.markDirty()
@@ -265,6 +277,17 @@ export function createScratchCard(
 
   lockCanvasStyles(true)
   clearPrizeContent()
+
+  // 会话恢复：直接呈现 revealed 态（无动画、不发事件）
+  if (restore?.revealed) {
+    progress = 1
+    state = STATE.Revealed
+    injectPrizeContent()
+    root.classList.add('is-revealed')
+    resetBtn.hidden = false
+    canvas.style.setProperty('visibility', 'hidden', 'important')
+    canvas.style.setProperty('pointer-events', 'none', 'important')
+  }
 
   // ---------- 覆盖率采样器（C4） ----------
   let sampler: CoverageSampler | null = null

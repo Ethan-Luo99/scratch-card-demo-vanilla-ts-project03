@@ -1,0 +1,137 @@
+/*
+ * 活动编排层样式：
+ * - 颜色复用 scratch-card / 全局 CSS 变量，dark 主题自动跟随；
+ * - 遮罩与汇总层过渡动画仅在 prefers-reduced-motion: no-preference 下启用；
+ * - 编排层隐藏子卡自带「再刮一次」，串行链路统一由活动级 reset 驱动。
+ */
+
+:root {
+  --scratch-activity-gap: 16px;
+  --scratch-activity-mask-bg: rgba(18, 20, 26, 0.78);
+  --scratch-activity-mask-text: #f2f3f7;
+  --scratch-activity-notice-bg: #fff4e0;
+  --scratch-activity-notice-text: #7a4a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --scratch-activity-notice-bg: #3a2c12;
+    --scratch-activity-notice-text: #ffd9a0;
+  }
+}
+
+.scratch-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scratch-activity__slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--scratch-activity-gap);
+}
+
+.scratch-activity__slot {
+  position: relative;
+}
+
+/* 未解锁遮罩：默认隐藏且不拦截事件 */
+.scratch-activity__mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: var(--scratch-activity-mask-bg);
+  color: var(--scratch-activity-mask-text);
+  font-size: 14px;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.scratch-activity__slot.is-locked .scratch-activity__mask {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.scratch-activity__mask-lock {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.scratch-activity__notice {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--scratch-activity-notice-bg);
+  color: var(--scratch-activity-notice-text);
+  font-size: 14px;
+}
+
+.scratch-activity__summary {
+  padding: 18px 20px;
+  border: 1px solid var(--scratch-prize-border, var(--border, #ccc));
+  border-radius: 14px;
+  background: var(--scratch-prize-bg, transparent);
+  box-shadow: var(--shadow, none);
+  text-align: center;
+}
+
+.scratch-activity__summary-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  color: var(--text-h, inherit);
+}
+
+.scratch-activity__summary-desc {
+  margin: 0 0 12px;
+  color: var(--text, inherit);
+}
+
+.scratch-activity__restart {
+  padding: 8px 18px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.scratch-activity__restart:hover {
+  border-color: var(--accent, #646cff);
+  color: var(--accent, #646cff);
+}
+
+/* 只读降级：冻结交互并弱化展示 */
+.scratch-activity.is-readonly .scratch-activity__slots {
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+
+/* 串行链路完整性：禁用子卡自带的「再刮一次」 */
+.scratch-activity .scratch-reset-btn {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scratch-activity__mask {
+    transition:
+      opacity 240ms ease,
+      visibility 240ms ease;
+  }
+
+  .scratch-activity__summary {
+    transition: opacity 240ms ease;
+  }
+}

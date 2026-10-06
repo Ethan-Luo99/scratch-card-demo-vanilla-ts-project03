@@ -8,6 +8,7 @@ export type {
   ScratchCardHandle,
   ScratchCardOptions,
   ScratchPrize,
+  ScratchRestoreOptions,
   ScratchCardEventMap,
 } from './types.ts'
 export type { State, Point, Stamp } from './types.ts'
