@@ -16,6 +16,7 @@ import type {
   Point,
   ScratchCardHandle,
   ScratchCardOptions,
+  ScratchCardSnapshot,
   ScratchPrize,
 } from './types.ts'
 import { STATE } from './types.ts'
@@ -256,6 +257,8 @@ export function createScratchCard(
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.drawImage(snapshot, 0, 0, canvas.width, canvas.height)
       ctx.restore()
+    } else if (restoredCoverImage && !restoredCoverApplied) {
+      applyRestoredCover()
     } else {
       repaintCover()
     }
@@ -573,6 +576,7 @@ export function createScratchCard(
     reset,
     reveal,
     getProgress: () => progress,
+    snapshot,
     on<T extends EventName>(type: T, listener: Listener<T>): () => void {
       let set = listeners.get(type)
       if (!set) {
@@ -586,6 +590,79 @@ export function createScratchCard(
       }
     },
     destroy,
+  }
+
+  // ---------- 可选恢复快照（编排层刷新恢复；不影响默认行为） ----------
+  // restoredCoverImage / restoredCoverApplied 被上方 resizeCanvas 引用，
+  // 函数声明提升保证此处赋值先于首次 resizeCanvas() 调用执行。
+  let restoredCoverImage: HTMLImageElement | null = null
+  let restoredCoverApplied = false
+
+  function applyRestoredCover(): void {
+    if (!restoredCoverImage || restoredCoverApplied || fallback || !ctx) return
+    if (canvas.width === 0 || canvas.height === 0) return
+    restoredCoverApplied = true
+    hasFreshCover = true
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(restoredCoverImage, 0, 0, canvas.width, canvas.height)
+    ctx.restore()
+    sampler?.markDirty()
+  }
+
+  function snapshot(): ScratchCardSnapshot {
+    const revealed = state === STATE.Revealed
+    let cover: string | undefined
+    if (!fallback && !revealed && progress > 0 && canvas.width > 0) {
+      try {
+        cover = canvas.toDataURL('image/png')
+      } catch {
+        cover = undefined
+      }
+    }
+    const result: ScratchCardSnapshot = {
+      state: revealed ? 'revealed' : 'idle',
+      progress,
+      round: roundId,
+    }
+    if (cover !== undefined) result.cover = cover
+    return result
+  }
+
+  const restore = options.restore
+  if (restore) {
+    if (
+      Number.isInteger(restore.round) &&
+      restore.round >= 0 &&
+      restore.round < 1_000_000_000
+    ) {
+      roundId = restore.round
+    }
+    if (restore.state === 'revealed') {
+      // 同步进入 revealed 终态：无动画；构造期监听集为空，emit 对外不可见
+      progress = 1
+      injectPrizeContent()
+      state = STATE.Revealing
+      root.classList.add('is-revealing')
+      lockCanvasStyles(false)
+      canvas.style.setProperty('opacity', '0', 'important')
+      finishReveal()
+    } else if (!fallback && restore.progress > 0 && restore.cover) {
+      const expectedRound = roundId
+      progress = clamp(restore.progress, 0, 1)
+      const image = new Image()
+      image.onload = () => {
+        if (destroyed || roundId !== expectedRound) return
+        restoredCoverImage = image
+        applyRestoredCover()
+      }
+      image.onerror = () => {
+        if (destroyed || roundId !== expectedRound) return
+        // 位图损坏：回退全新涂层，进度归零保持一致
+        progress = 0
+      }
+      image.src = restore.cover
+    }
   }
 
   // 已在文档中（占位 replaceWith 后才构造）时立即建位图；

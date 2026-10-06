@@ -7,6 +7,7 @@ export { createScratchCard } from './scratch-card.ts'
 export type {
   ScratchCardHandle,
   ScratchCardOptions,
+  ScratchCardSnapshot,
   ScratchPrize,
   ScratchCardEventMap,
 } from './types.ts'

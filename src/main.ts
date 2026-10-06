@@ -3,7 +3,7 @@ import heroImg from './assets/hero.png'
 import typescriptLogo from './assets/typescript.svg'
 import viteLogo from './assets/vite.svg'
 import { setupCounter } from './counter.ts'
-import { createScratchCard } from './scratch-card/index.ts'
+import { createScratchActivity } from './scratch-activity/index.ts'
 import cardImg from './assets/typescript.svg'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -64,13 +64,34 @@ setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
 
 // 占位节点 replaceWith 挂载（设计 B3/A2）：严禁 innerHTML += 重建子树，
 // 否则会丢失 counter 等既有监听。
-const scratchCard = createScratchCard({
-  prize: {
-    title: '谢谢参与',
-    description: '再来一次吧',
-    image: { src: cardImg, alt: 'TypeScript 标志（占位奖品图）' },
+const activity = createScratchActivity({
+  cards: [
+    {
+      prize: {
+        title: '一等奖',
+        description: '锦鲤附体',
+        image: { src: cardImg, alt: 'TypeScript 标志（占位奖品图）' },
+      },
+      width: 320,
+      height: 200,
+    },
+    {
+      prize: { title: '二等奖', description: '手气不错' },
+      width: 320,
+      height: 200,
+    },
+    {
+      prize: { title: '谢谢参与', description: '再来一次吧' },
+      width: 320,
+      height: 200,
+    },
+  ],
+  storagePrefix: 'demo-scratch-activity',
+  allRevealed: (prizes) => {
+    console.log(
+      'allRevealed:',
+      prizes.map((prize) => prize.title).join(' / '),
+    )
   },
-  width: 320,
-  height: 200,
 })
-document.querySelector<HTMLDivElement>('#prize-card')!.replaceWith(scratchCard.element)
+document.querySelector<HTMLDivElement>('#prize-card')!.replaceWith(activity.element)

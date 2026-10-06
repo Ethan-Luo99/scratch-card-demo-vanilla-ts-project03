@@ -1,0 +1,175 @@
+/*
+ * 活动编排层样式：
+ * - 颜色挂 CSS 变量（:root 默认值 + dark 媒体块），复用全局 --accent/--border/--shadow；
+ * - 解锁遮罩 / 汇总层过渡走类名切换；
+ * - prefers-reduced-motion 下一律去除过渡与动画。
+ */
+
+:root {
+  --scratch-activity-mask-bg: rgba(18, 20, 28, 0.62);
+  --scratch-activity-mask-text: #f4f5f8;
+  --scratch-activity-mask-sub: rgba(244, 245, 248, 0.78);
+  --scratch-activity-summary-bg: linear-gradient(160deg, #ffffff 0%, #f1f0f6 100%);
+  --scratch-activity-summary-text: #1d1f26;
+  --scratch-activity-notice-bg: #fff4e0;
+  --scratch-activity-notice-text: #6b4a00;
+  --scratch-activity-transition: 360ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --scratch-activity-mask-bg: rgba(8, 9, 13, 0.72);
+    --scratch-activity-mask-text: #f4f5f8;
+    --scratch-activity-mask-sub: rgba(244, 245, 248, 0.7);
+    --scratch-activity-summary-bg: linear-gradient(160deg, #1f2028 0%, #16171d 100%);
+    --scratch-activity-summary-text: #e8eaf0;
+    --scratch-activity-notice-bg: #3a2f12;
+    --scratch-activity-notice-text: #ffd98a;
+  }
+}
+
+.scratch-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.scratch-activity-slot {
+  position: relative;
+}
+
+/* 未解锁遮罩：覆盖子卡，拦截指针；键盘侧由 inert 兜底 */
+.scratch-activity-lock {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: var(--scratch-activity-mask-bg);
+  color: var(--scratch-activity-mask-text);
+  text-align: center;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--scratch-activity-transition) ease,
+    visibility 0s linear 0s;
+}
+
+.scratch-activity-lock.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--scratch-activity-transition) ease,
+    visibility 0s linear var(--scratch-activity-transition);
+}
+
+.scratch-activity-lock-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.scratch-activity-lock-countdown {
+  margin: 0;
+  font-size: 14px;
+  color: var(--scratch-activity-mask-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 汇总层 */
+.scratch-activity-summary {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--scratch-activity-summary-bg);
+  color: var(--scratch-activity-summary-text);
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  text-align: center;
+}
+
+.scratch-activity-summary.is-open {
+  animation: scratch-activity-summary-in var(--scratch-activity-transition) ease-out;
+}
+
+@keyframes scratch-activity-summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.scratch-activity-summary-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.scratch-activity-summary-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scratch-activity-summary-item {
+  font-size: 15px;
+}
+
+.scratch-activity-restart {
+  font: inherit;
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--accent, #646cff);
+  color: #fff;
+  cursor: pointer;
+}
+
+.scratch-activity-restart:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 只读提示条 */
+.scratch-activity-notice {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  background: var(--scratch-activity-notice-bg);
+  color: var(--scratch-activity-notice-text);
+}
+
+/* 编排层接管轮次：隐藏子卡自带的「再刮一次」 */
+.scratch-activity .scratch-reset-btn {
+  display: none;
+}
+
+.scratch-activity.is-readonly .scratch-activity-slot {
+  opacity: 0.72;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scratch-activity-lock,
+  .scratch-activity-lock.is-hidden {
+    transition: none;
+  }
+
+  .scratch-activity-summary.is-open {
+    animation: none;
+  }
+}
