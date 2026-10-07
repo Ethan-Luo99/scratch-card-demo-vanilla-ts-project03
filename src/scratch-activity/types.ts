@@ -20,12 +20,11 @@ export type ActivityPhase = (typeof ACTIVITY_PHASE)[keyof typeof ACTIVITY_PHASE]
 export type ScratchActivityCardOptions = Omit<ScratchCardOptions, 'restore'>
 
 export interface ScratchActivityOptions {
-  /** 恰好 3 张卡，按串行解锁顺序给出 */
-  cards: readonly [
-    ScratchActivityCardOptions,
-    ScratchActivityCardOptions,
-    ScratchActivityCardOptions,
-  ]
+  /**
+   * 卡片配置，按串行解锁顺序给出；支持 1~9 张，运行时校验数量，
+   * 越界直接抛错（类型层面不再约束固定长度元组）。
+   */
+  cards: readonly ScratchActivityCardOptions[]
   /** sessionStorage key 前缀，默认 'scratch-activity' */
   storagePrefix?: string
   /** 上一张 revealed 后下一张的解锁倒计时（ms），默认 2000；0 表示立即解锁 */
