@@ -653,13 +653,25 @@ export function createScratchCard(
       const image = new Image()
       image.onload = () => {
         if (destroyed || roundId !== expectedRound) return
+        // 位图取舍：restore 的 cover 按导出时的卡片尺寸（CSS 像素 ×DPR）
+        // 编码。若与本卡当前位图尺寸不一致（宿主改版宽高/DPR 变化），
+        // 强贴会造成拉伸错位，故按既定取舍「保留 progress/round 数值
+        // 进度、丢弃位图」——回退为全新完整涂层（数值进度仍在，下一次
+        // 刮擦采样会以实际覆盖率自然修正，揭示阈值语义不变）。
+        const bitmap = canvas
+        const sizeMismatch =
+          bitmap.width > 0 &&
+          bitmap.height > 0 &&
+          (image.naturalWidth !== bitmap.width ||
+            image.naturalHeight !== bitmap.height)
+        if (sizeMismatch) return
         restoredCoverImage = image
         applyRestoredCover()
       }
       image.onerror = () => {
         if (destroyed || roundId !== expectedRound) return
-        // 位图损坏：回退全新涂层，进度归零保持一致
-        progress = 0
+        // 位图损坏（dataURL 非法/解码失败）：同样「保留 progress、丢弃
+        // 位图」，回退全新涂层，不连带动摇持久化保全下来的数值进度。
       }
       image.src = restore.cover
     }

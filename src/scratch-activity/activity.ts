@@ -1,15 +1,18 @@
 /**
  * 活动编排层工厂（createScratchActivity）：
- * - 3 张刮刮卡串行解锁：第 N 张 revealed 后第 N+1 张倒计时解锁，
+ * - 1~9 张刮刮卡串行解锁：第 N 张 revealed 后第 N+1 张倒计时解锁，
  *   未解锁卡覆盖遮罩层 + 解锁倒计时文案；
  * - 全部 revealed 后触发 allRevealed 回调并展示汇总层；
  * - 进度持久化到 sessionStorage（key 前缀可配置），隐私模式抛异常时
- *   静默降级为内存态；记录只含 state/progress/round/cover（涂层位图），
- *   不写入任何奖品内容；
+ *   静默降级为内存态；记录只含 state/progress/round/attempts/cover
+ *   （涂层位图），不写入任何奖品内容；
  * - storage 事件做 last-write-wins + 代际号合并：远端代际更高时本页
  *   降级只读并提示刷新，旧代际数据直接忽略；
  * - 所有异步回调（倒计时 timer / storage 事件 / 子卡事件）一律校验
  *   「代际号 + 轮次号」，过期回调直接丢弃；
+ * - 持久化 schema v2：顶层 cardsCount + 每卡 attempts（累计刮擦轮次），
+ *   加载 v1 旧记录无损迁移（attempts 置 0、cover 保留）并立即落盘；
+ *   storage 事件收到 v1 外来记录时按「旧版写入方=低代际」忽略；
  * - destroy() 只回收编排层自身监听与 timer，不销毁子卡句柄。
  */
 import styleText from './activity.css?inline'
@@ -23,17 +26,18 @@ import type {
 } from './types.ts'
 import { createSafeStorage } from './storage.ts'
 import {
+  MAX_CARDS,
+  MIN_CARDS,
   RECORD_VERSION,
   createInitialCards,
   decideRemoteRecord,
   isAllRevealed,
   isCardUnlocked,
-  parseRecord,
+  parseRecordDetailed,
   serializeRecord,
 } from './logic.ts'
 import type { ActivityRecord, CardPersistState } from './logic.ts'
 
-const CARD_COUNT = 3
 const DEFAULT_STORAGE_PREFIX = 'scratch-activity'
 const DEFAULT_UNLOCK_DELAY = 2000
 const COUNTDOWN_TICK = 200
@@ -53,8 +57,11 @@ export function createScratchActivity(
   options: ScratchActivityOptions,
 ): ScratchActivityHandle {
   injectStyles()
-  if (options.cards.length !== CARD_COUNT) {
-    throw new Error(`createScratchActivity 需要恰好 ${CARD_COUNT} 张卡片配置`)
+  const cardCount = options.cards.length
+  if (cardCount < MIN_CARDS || cardCount > MAX_CARDS) {
+    throw new Error(
+      `createScratchActivity 需要 ${MIN_CARDS}~${MAX_CARDS} 张卡片配置，实际收到 ${cardCount} 张`,
+    )
   }
 
   const storageKey = `${options.storagePrefix ?? DEFAULT_STORAGE_PREFIX}:state`
@@ -67,15 +74,23 @@ export function createScratchActivity(
   let generation = 1
   let phase: ActivityPhase = ACTIVITY_PHASE.Active
   let lastPersistAt = 0
-  let cardsState: CardPersistState[] = createInitialCards(CARD_COUNT)
+  let cardsState: CardPersistState[] = createInitialCards(cardCount)
 
-  // 载入持久化记录；不合法即视为无记录（parseRecord 已做全量校验）
-  const stored = parseRecord(storage.getItem(storageKey))
-  if (stored && stored.cards.length === CARD_COUNT) {
+  // 载入持久化记录并归一化为 v2；不合法或卡数不符即视为无记录。
+  // sourceVersion === 1 表示读入的是旧版记录：内存无损迁移后，初始化收尾
+  // 阶段立即以 v2 落盘（同一 v1 再次加载时已是 v2，迁移幂等、无重复副作用）。
+  const parsedStored = parseRecordDetailed(storage.getItem(storageKey))
+  const stored =
+    parsedStored && parsedStored.record.cards.length === cardCount
+      ? parsedStored.record
+      : null
+  let migrateOnLoad = false
+  if (stored) {
     generation = stored.generation
     phase = stored.phase
     lastPersistAt = stored.updatedAt
     cardsState = stored.cards
+    migrateOnLoad = parsedStored?.sourceVersion === 1
   }
 
   /** 由持久化状态推导子卡 restore 选项 */
@@ -119,7 +134,7 @@ export function createScratchActivity(
   const lockCountdownEls: HTMLParagraphElement[] = []
   const cardWraps: HTMLElement[] = []
 
-  for (let index = 0; index < CARD_COUNT; index += 1) {
+  for (let index = 0; index < cardCount; index += 1) {
     const slot = document.createElement('div')
     slot.className = 'scratch-activity-slot'
     const wrap = document.createElement('div')
@@ -166,7 +181,7 @@ export function createScratchActivity(
 
   // ---------- 解锁标志与资源登记 ----------
   const unlockedFlags: boolean[] = []
-  for (let index = 0; index < CARD_COUNT; index += 1) {
+  for (let index = 0; index < cardCount; index += 1) {
     unlockedFlags.push(
       cardsState[index].state === 'revealed' ||
         isCardUnlocked(cardsState, index),
@@ -175,7 +190,8 @@ export function createScratchActivity(
 
   const disposers: Array<() => void> = []
   /** 每张卡的「代际+轮次」动态订阅（rewire 时整体替换） */
-  const dynamicUnsubs: Array<Array<() => void>> = [[], [], []]
+  const dynamicUnsubs: Array<Array<() => void>> = []
+  for (let index = 0; index < cardCount; index += 1) dynamicUnsubs.push([])
 
   let countdownTimer = 0
   let countdownTarget = -1
@@ -186,6 +202,7 @@ export function createScratchActivity(
       state: card.state,
       progress: card.progress,
       round: card.round,
+      attempts: card.attempts,
     }
     if (card.cover !== undefined) copy.cover = card.cover
     return copy
@@ -198,6 +215,7 @@ export function createScratchActivity(
       generation,
       updatedAt: Date.now(),
       phase,
+      cardsCount: cardsState.length,
       cards: cardsState.map(copyCardState),
     }
     lastPersistAt = record.updatedAt
@@ -206,10 +224,13 @@ export function createScratchActivity(
 
   function syncFromSnapshot(index: number): void {
     const snap = cards[index].snapshot()
+    const previous = cardsState[index]
     const next: CardPersistState = {
       state: snap.state,
       progress: snap.progress,
       round: snap.round,
+      // snapshot 不含 attempts：该累计量由编排层维护，同步时保留现值
+      attempts: previous.attempts,
     }
     if (snap.cover !== undefined) next.cover = snap.cover
     cardsState[index] = next
@@ -232,6 +253,20 @@ export function createScratchActivity(
     const round = cardsState[index].round
     const card = cards[index]
     dynamicUnsubs[index] = [
+      // attempts：该卡「累计进入刮擦状态的轮次数」。scratchstart 每轮仅在
+      // 首次有效刮擦时派发一次，订阅随 rewire 按「代际+轮次」重建，因此
+      // 守卫通过即代表新轮次首次进入刮擦，计数 +1 并持久化。
+      card.on('scratchstart', () => {
+        if (!isCurrent(gen, index, round)) return
+        // scratchstart 先于首张 progress 到达：snapshot 此刻 progress 仍为
+        // 0，syncFromSnapshot 会回退 attempts，故先同步快照再叠加本计数。
+        syncFromSnapshot(index)
+        cardsState[index] = {
+          ...cardsState[index],
+          attempts: cardsState[index].attempts + 1,
+        }
+        persist()
+      }),
       card.on('progress', () => {
         if (!isCurrent(gen, index, round)) return
         syncFromSnapshot(index)
@@ -252,7 +287,7 @@ export function createScratchActivity(
     syncFromSnapshot(index)
     unlockedFlags[index] = true
     updateLockUI(index)
-    if (index + 1 < CARD_COUNT) startUnlockCountdown(index + 1)
+    if (index + 1 < cardCount) startUnlockCountdown(index + 1)
     if (isAllRevealed(cardsState)) {
       completeActivity()
     } else {
@@ -263,13 +298,19 @@ export function createScratchActivity(
   /** reset 为常驻订阅：任何来源的 reset 都回收串行不变量 */
   function handleCardReset(index: number, round: number): void {
     if (destroyed || readOnly) return
-    cardsState[index] = { state: 'idle', progress: 0, round }
+    // attempts 为跨轮次累计量，reset 只开新一轮、不清零
+    cardsState[index] = {
+      state: 'idle',
+      progress: 0,
+      round,
+      attempts: cardsState[index].attempts,
+    }
     clearCountdown()
     if (phase === ACTIVITY_PHASE.Completed) {
       phase = ACTIVITY_PHASE.Active
       hideSummary()
     }
-    for (let j = index; j < CARD_COUNT; j += 1) {
+    for (let j = index; j < cardCount; j += 1) {
       if (cardsState[j].state === 'revealed') continue
       unlockedFlags[j] = isCardUnlocked(cardsState, j)
       updateLockUI(j)
@@ -279,7 +320,7 @@ export function createScratchActivity(
   }
 
   function wireAll(): void {
-    for (let index = 0; index < CARD_COUNT; index += 1) {
+    for (let index = 0; index < cardCount; index += 1) {
       disposers.push(
         cards[index].on('reset', (ev) => handleCardReset(index, ev.round)),
       )
@@ -372,9 +413,9 @@ export function createScratchActivity(
 
   // ---------- 多标签页：storage 事件 + 代际合并 ----------
   function applyRemote(remote: ActivityRecord): void {
-    if (remote.cards.length !== CARD_COUNT) return
+    if (remote.cards.length !== cardCount) return
     clearCountdown()
-    for (let index = 0; index < CARD_COUNT; index += 1) {
+    for (let index = 0; index < cardCount; index += 1) {
       const remoteCard = remote.cards[index]
       const wasRevealed = cardsState[index].state === 'revealed'
       cardsState[index] = copyCardState(remoteCard)
@@ -416,17 +457,21 @@ export function createScratchActivity(
   function handleStorage(event: StorageEvent): void {
     if (destroyed || readOnly) return
     if (event.key !== storageKey) return
-    const remote = parseRecord(event.newValue)
+    // parseRecordDetailed 同时归一化 v1/v2；v1 外来记录在
+    // decideRemoteRecord 内按「旧版写入方=低代际」直接忽略，
+    // 本页不采用其内容、也不回写 v1（persist 恒写 v2）、更不会
+    // 被误判为高代际回灌而进入只读。
+    const parsedRemote = parseRecordDetailed(event.newValue)
     const decision = decideRemoteRecord(
       { generation, updatedAt: lastPersistAt },
-      remote,
+      parsedRemote,
     )
-    if (decision === 'ignore' || !remote) return
+    if (decision === 'ignore' || !parsedRemote) return
     if (decision === 'readonly') {
       enterReadOnly()
       return
     }
-    applyRemote(remote)
+    applyRemote(parsedRemote.record)
   }
 
   // ---------- 再来一轮：新代际 ----------
@@ -437,7 +482,7 @@ export function createScratchActivity(
     hideSummary()
     clearCountdown()
     // reset 事件（常驻订阅）逐卡回收状态、重接线并持久化
-    for (let index = 0; index < CARD_COUNT; index += 1) {
+    for (let index = 0; index < cardCount; index += 1) {
       cards[index].reset()
     }
     persist()
@@ -481,7 +526,7 @@ export function createScratchActivity(
 
   // ---------- 初始化收尾 ----------
   wireAll()
-  for (let index = 0; index < CARD_COUNT; index += 1) {
+  for (let index = 0; index < cardCount; index += 1) {
     updateLockUI(index)
   }
   if (phase === ACTIVITY_PHASE.Completed) showSummary()
@@ -495,8 +540,11 @@ export function createScratchActivity(
     restartBtn.removeEventListener('click', handleRestartClick),
   )
 
-  // 全新活动：落一条初始记录，让其他标签页能感知代际
+  // 全新活动：落一条初始记录，让其他标签页能感知代际；
+  // 读入的是 v1 旧记录时：首次加载即把无损迁移结果以 v2 落盘
+  // （幂等：此后再加载读到的就是 v2，不会重复迁移）。
   if (!stored) persist()
+  else if (migrateOnLoad) persist()
 
   return handle
 }

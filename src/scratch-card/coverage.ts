@@ -84,8 +84,14 @@ export class CoverageSampler {
     this.interval = Math.max(0, options.interval)
     this.threshold = options.threshold
     this.onMeasure = options.onMeasure
-    this.raf = options.raf ?? requestAnimationFrame
-    this.caf = options.caf ?? cancelAnimationFrame
+    // WebIDL 方法必须绑定宿主调用：直接把 requestAnimationFrame 脱绑存入
+    // 字段再以 this.raf(...) 调用会抛 Illegal invocation，故用包装函数固化。
+    const rafImpl = options.raf
+      ?? ((cb: (time: number) => void) => requestAnimationFrame(cb))
+    const cafImpl = options.caf
+      ?? ((handle: number) => cancelAnimationFrame(handle))
+    this.raf = rafImpl
+    this.caf = cafImpl
     this.probe = document.createElement('canvas')
     this.probe.width = GRID_WIDTH
     this.probe.height = GRID_HEIGHT
